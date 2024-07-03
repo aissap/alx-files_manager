@@ -3,13 +3,25 @@ import dbClient from '../utils/db';
 
 class AppController {
   static getStatus(req, res) {
-    res.status(200).json({ redis: redisClient.isAlive(), db: dbClient.isAlive() });
+    try {
+      const redis = redisClient.isAlive();
+      const db = dbClient.isAlive();
+      res.status(200).json({ redis, db });
+    } catch (error) {
+      console.error('Error fetching status:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
   }
 
   static async getStats(req, res) {
-    const usersCount = await dbClient.nbUsers();
-    const filesCount = await dbClient.nbFiles();
-    res.status(200).json({ users: usersCount, files: filesCount });
+    try {
+      const usersCount = await dbClient.nbUsers();
+      const filesCount = await dbClient.nbFiles();
+      res.status(200).json({ users: usersCount, files: filesCount });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
   }
 }
 

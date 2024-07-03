@@ -1,9 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import sha1 from 'sha1';
 import dbClient from '../utils/db';
+import redisClient from '../utils/redis';
+import { userQueue } from '../worker';
 
-class UsersController {
-  static async postNew(req, res) {
+const UsersController = {
+  async postNew(req, res) {
     const { email, password } = req.body;
 
     if (!email) {
@@ -13,31 +15,22 @@ class UsersController {
       return res.status(400).json({ error: 'Missing password' });
     }
 
-    try {
-      const db = dbClient.db();
-      const usersCollection = db.collection('users');
+    const db = dbClient.db();
+    const usersCollection = db.collection('users');
 
-      const existingUser = await usersCollection.findOne({ email });
-      if (existingUser) {
-        return res.status(400).json({ error: 'Already exist' });
-      }
-
-      const hashedPassword = sha1(password);
-
-      const newUser = {
-        email,
-        password: hashedPassword,
-        id: uuidv4(),
-      };
-
-      const result = await usersCollection.insertOne(newUser);
-
-      return res.status(201).json({ id: result.insertedId, email: newUser.email });
-    } catch (error) {
-      console.error('Error creating user:', error);
-      return res.status(500).json({ error: 'Internal Server Error' });
+    const user = await usersCollection.findOne({ email });
+    if (user) {
+      return res.status(400).json({ error: 'Already exist' });
     }
-  }
-}
 
-export default UsersController;
+    const hashedPassword = sha1(password);
+    const userId = uuidv4();
+    const newUser = { email, password: hashedPassword, _id: userId };
+
+    await usersCollection.insertOne(newUser);
+
+    userQueue.add({ userId });
+
+    return res.status(201).json({ id: userId, email });
+  },
+};
