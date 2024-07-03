@@ -1,39 +1,55 @@
-import { MongoClient } from 'mongodb';
+import { createClient } from 'redis';
 
-class DBClient {
-  constructor() {
-    const host = process.env.DB_HOST || 'localhost';
-    const port = process.env.DB_PORT || 27017;
-    const database = process.env.DB_DATABASE || 'files_manager';
+class RedisClient {
+  constructor () {
+    this.client = createClient();
 
-    const uri = mongodb://${host}:${port}/${database};
-    this.client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
-
-    this.client.connect((err) => {
-      if (err) {
-        console.error(MongoDB connection error: ${err});
-      } else {
-        console.log('MongoDB connected');
-      }
+    // Handle Redis client errors
+    this.client.on('error', (err) => {
+      console.error('Redis client error:', err);
     });
   }
 
-  isAlive() {
-    return this.client.isConnected();
+  isAlive () {
+    return this.client.connected;
   }
 
-  async nbUsers() {
-    const db = this.client.db();
-    const count = await db.collection('users').countDocuments();
-    return count;
+  async get (key) {
+    return new Promise((resolve, reject) => {
+      this.client.get(key, (err, reply) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(reply);
+        }
+      });
+    });
   }
 
-  async nbFiles() {
-    const db = this.client.db();
-    const count = await db.collection('files').countDocuments();
-    return count;
+  async set (key, value, duration) {
+    return new Promise((resolve, reject) => {
+      this.client.set(key, value, 'EX', duration, (err, reply) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(reply);
+        }
+      });
+    });
+  }
+
+  async del (key) {
+    return new Promise((resolve, reject) => {
+      this.client.del(key, (err, reply) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(reply);
+        }
+      });
+    });
   }
 }
 
-const dbClient = new DBClient();
-export default dbClient;
+const redisClient = new RedisClient();
+export default redisClient;
