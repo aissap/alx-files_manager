@@ -1,11 +1,8 @@
-import { v4 as uuidv4 } from 'uuid';
 import sha1 from 'sha1';
 import dbClient from '../utils/db';
-import redisClient from '../utils/redis';
-import { userQueue } from '../worker';
 
-const UsersController = {
-  async postNew(req, res) {
+class UsersController {
+  static async postNew(req, res) {
     const { email, password } = req.body;
 
     if (!email) {
@@ -15,22 +12,24 @@ const UsersController = {
       return res.status(400).json({ error: 'Missing password' });
     }
 
-    const db = dbClient.db();
-    const usersCollection = db.collection('users');
+    const usersCollection = dbClient.db.collection('users');
+    const existingUser = await usersCollection.findOne({ email });
 
-    const user = await usersCollection.findOne({ email });
-    if (user) {
+    if (existingUser) {
       return res.status(400).json({ error: 'Already exist' });
     }
 
     const hashedPassword = sha1(password);
-    const userId = uuidv4();
-    const newUser = { email, password: hashedPassword, _id: userId };
+    const newUser = {
+      email,
+      password: hashedPassword,
+    };
 
-    await usersCollection.insertOne(newUser);
+    const result = await usersCollection.insertOne(newUser);
+    const userId = result.insertedId;
 
-    userQueue.add({ userId });
+    return res.status(201).json({ id: userId, email: newUser.email });
+  }
+}
 
-    return res.status(201).json({ id: userId, email });
-  },
-};
+export default UsersController;
