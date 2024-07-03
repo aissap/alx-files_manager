@@ -1,51 +1,39 @@
-import redis from 'redis';
+import { MongoClient } from 'mongodb';
 
-class RedisClient {
+class DBClient {
   constructor() {
-    this.client = redis.createClient();
-    this.client.on('error', (err) => console.error('Redis client error:', err));
+    const host = process.env.DB_HOST || 'localhost';
+    const port = process.env.DB_PORT || 27017;
+    const database = process.env.DB_DATABASE || 'files_manager';
+
+    const uri = mongodb://${host}:${port}/${database};
+    this.client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+
+    this.client.connect((err) => {
+      if (err) {
+        console.error(MongoDB connection error: ${err});
+      } else {
+        console.log('MongoDB connected');
+      }
+    });
   }
 
   isAlive() {
-    return this.client.connected;
+    return this.client.isConnected();
   }
 
-  async get(key) {
-    return new Promise((resolve, reject) => {
-      this.client.get(key, (err, value) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(value);
-        }
-      });
-    });
+  async nbUsers() {
+    const db = this.client.db();
+    const count = await db.collection('users').countDocuments();
+    return count;
   }
 
-  async set(key, value, duration) {
-    return new Promise((resolve, reject) => {
-      this.client.set(key, value, 'EX', duration, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  async del(key) {
-    return new Promise((resolve, reject) => {
-      this.client.del(key, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
+  async nbFiles() {
+    const db = this.client.db();
+    const count = await db.collection('files').countDocuments();
+    return count;
   }
 }
 
-const redisClient = new RedisClient();
-export default redisClient;
+const dbClient = new DBClient();
+export default dbClient;
