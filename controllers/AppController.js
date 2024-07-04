@@ -1,33 +1,25 @@
-const { MongoClient } = require('mongodb');
+const { redisClient } = require('../utils/redis');
+const { dbClient } = require('../utils/db');
 
 const AppController = {
-    async getStatus(req, res) {
-        let redisStatus = false;
-        let dbStatus = false;
+  async getStatus(req, res) {
+    const redisAlive = redisClient.isAlive();
+    const dbAlive = dbClient.isAlive();
 
-        try {
-            redisStatus = redisClient.isAlive();
+    res.status(200).json({ redis: redisAlive, db: dbAlive });
+  },
 
-            const client = new MongoClient(process.env.DB_HOST, {
-                useNewUrlParser: true,
-                useUnifiedTopology: true,
-            });
-            await client.connect();
-            const db = client.db(process.env.DB_DATABASE);
-            dbStatus = !!db;
+  async getStats(req, res) {
+    try {
+      const usersCount = await dbClient.nbUsers();
+      const filesCount = await dbClient.nbFiles();
 
-            client.close();
-        } catch (err) {
-            console.error('Error checking status:', err);
-        }
-
-        if (redisStatus && dbStatus) {
-            res.status(200).json({ redis: true, db: true });
-        } else {
-            res.status(500).json({ redis: false, db: false });
-        }
-    },
-
+      res.status(200).json({ users: usersCount, files: filesCount });
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  },
 };
 
 module.exports = AppController;
