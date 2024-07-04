@@ -1,10 +1,13 @@
-import sha1 from 'sha1';
-import dbClient from '../utils/db';
+import { dbClient } from '../utils/db';
+import crypto from 'crypto';
 
-class UsersController {
-  static async postNew(req, res) {
+const sha1 = (input) => {
+  return crypto.createHash('sha1').update(input).digest('hex');
+};
+
+const UsersController = {
+  async postNew(req, res) {
     const { email, password } = req.body;
-
     if (!email) {
       return res.status(400).json({ error: 'Missing email' });
     }
@@ -12,24 +15,27 @@ class UsersController {
       return res.status(400).json({ error: 'Missing password' });
     }
 
-    const usersCollection = dbClient.db.collection('users');
-    const existingUser = await usersCollection.findOne({ email });
+    try {
+      const existingUser = await dbClient.usersCollection().findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({ error: 'Already exist' });
+      }
 
-    if (existingUser) {
-      return res.status(400).json({ error: 'Already exist' });
+      const hashedPassword = sha1(password);
+
+      const newUser = {
+        email,
+        password: hashedPassword,
+      };
+
+      const result = await dbClient.usersCollection().insertOne(newUser);
+
+      return res.status(201).json({ id: result.insertedId, email: newUser.email });
+    } catch (err) {
+      console.error('Error creating user:', err);
+      return res.status(500).json({ error: 'Internal Server Error' });
     }
-
-    const hashedPassword = sha1(password);
-    const newUser = {
-      email,
-      password: hashedPassword,
-    };
-
-    const result = await usersCollection.insertOne(newUser);
-    const userId = result.insertedId;
-
-    return res.status(201).json({ id: userId, email: newUser.email });
-  }
-}
+  },
+};
 
 export default UsersController;
