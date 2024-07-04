@@ -2,11 +2,14 @@ const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const { promisify } = require('util');
 const path = require('path');
+const { ObjectId } = require('mongodb');
+const mime = require('mime-types');
+const Bull = require('bull');
+const imageThumbnail = require('image-thumbnail');
 const dbClient = require('../utils/db');
 const redisClient = require('../utils/redis');
-const sha1 = require('sha1');
-const mime = require('mime-types');
-const { ObjectId } = require('mongodb');
+
+const fileQueue = new Bull('fileQueue');
 
 class FilesController {
   static async postUpload(req, res) {
@@ -38,7 +41,7 @@ class FilesController {
     const db = dbClient.client.db(dbClient.database);
 
     if (parentId !== 0) {
-      const parent = await db.collection('files').findOne({ _id: new require('mongodb').ObjectID(parentId) });
+      const parent = await db.collection('files').findOne({ _id: new ObjectId(parentId) });
       if (!parent) {
         return res.status(400).json({ error: 'Parent not found' });
       }
@@ -49,11 +52,11 @@ class FilesController {
     }
 
     const fileData = {
-      userId: new require('mongodb').ObjectID(userId),
+      userId: new ObjectId(userId),
       name,
       type,
       isPublic,
-      parentId: parentId === 0 ? 0 : new require('mongodb').ObjectID(parentId),
+      parentId: parentId === 0 ? 0 : new ObjectId(parentId),
       localPath: null,
     };
 
@@ -66,6 +69,11 @@ class FilesController {
       const localPath = path.join(folderPath, uuidv4());
       fs.writeFileSync(localPath, Buffer.from(data, 'base64'));
       fileData.localPath = localPath;
+
+      if (type === 'image') {
+        const jobId = uuidv4();
+        await fileQueue.add({ userId: userId, fileId: fileData._id.toString() });
+      }
     }
 
     const result = await db.collection('files').insertOne(fileData);
@@ -96,8 +104,8 @@ class FilesController {
     const fileId = req.params.id;
     const db = dbClient.client.db(dbClient.database);
     const file = await db.collection('files').findOne({
-      _id: new require('mongodb').ObjectID(fileId),
-      userId: new require('mongodb').ObjectID(userId),
+      _id: new ObjectId(fileId),
+      userId: new ObjectId(userId),
     });
 
     if (!file) {
@@ -125,8 +133,8 @@ class FilesController {
     const files = await db.collection('files').aggregate([
       {
         $match: {
-          parentId: parentId === 0 ? 0 : new require('mongodb').ObjectID(parentId),
-          userId: new require('mongodb').ObjectID(userId),
+          parentId: parentId === 0 ? 0 : new ObjectId(parentId),
+          userId: new ObjectId(userId),
         },
       },
       { $skip: page * 20 },
@@ -135,6 +143,7 @@ class FilesController {
 
     return res.json(files);
   }
+
   static async putPublish(req, res) {
     const token = req.headers['x-token'];
     const userId = await redisClient.get(`auth_${token}`);
@@ -162,6 +171,7 @@ class FilesController {
     const updatedFile = await dbClient.db.collection('files').findOne({ _id: ObjectId(fileId) });
     return res.status(200).json(updatedFile);
   }
+
   static async getFile(req, res) {
     const fileId = req.params.id;
     const file = await dbClient.db.collection('files').findOne({ _id: ObjectId(fileId) });
@@ -170,7 +180,7 @@ class FilesController {
     const token = req.headers['x-token'];
     const userId = await redisClient.get(`auth_${token}`);
     if (!file.isPublic) {
-        if (!userId || userId !== file.userId.toString()) return res.status(404).json({ error: 'Not found' });
+      if (!userId || userId !== file.userId.toString()) return res.status(404).json({ error: 'Not found' });
     }
 
     if (file.type === 'folder') return res.status(400).json({ error: "A folder doesn't have content" });

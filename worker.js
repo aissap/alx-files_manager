@@ -1,66 +1,40 @@
-import Bull from 'bull';
-import dbClient from './utils/db';
-import imageThumbnail from 'image-thumbnail';
-import fs from 'fs';
-import path from 'path';
+const Bull = require('bull');
+const fs = require('fs');
+const imageThumbnail = require('image-thumbnail');
+const { getDB } = require('./utils/db');
+const { ObjectId } = require('mongodb');
 
 const fileQueue = new Bull('fileQueue');
-const userQueue = new Bull('userQueue');
 
-fileQueue.process(async (job, done) => {
-  const { fileId, userId } = job.data;
+fileQueue.process(async (job) => {
+  const { userId, fileId } = job.data;
 
   if (!fileId) {
-    done(new Error('Missing fileId'));
-    return;
+    throw new Error('Missing fileId');
   }
 
   if (!userId) {
-    done(new Error('Missing userId'));
-    return;
+    throw new Error('Missing userId');
   }
 
-  const db = dbClient.db();
-  const filesCollection = db.collection('files');
-  const file = await filesCollection.findOne({ _id: dbClient.getObjectId(fileId), userId });
+  const db = await getDB();
+  const file = await db.collection('files').findOne({ _id: ObjectId(fileId), userId: ObjectId(userId) });
 
   if (!file) {
-    done(new Error('File not found'));
-    return;
+    throw new Error('File not found');
   }
 
-  const options = { responseType: 'base64' };
-  const sizes = [100, 250, 500];
+  const sizes = [500, 250, 100];
+  const filePath = file.localPath;
 
-  for (const size of sizes) {
-    const thumbnail = await imageThumbnail(file.localPath, { width: size });
-    const thumbPath = `${file.localPath}_${size}`;
-    fs.writeFileSync(thumbPath, Buffer.from(thumbnail, 'base64'));
+  try {
+    for (const size of sizes) {
+      const thumbnail = await imageThumbnail(filePath, { width: size });
+      fs.writeFileSync(`${filePath}_${size}`, thumbnail);
+    }
+  } catch (error) {
+    throw new Error(`Error generating thumbnails: ${error.message}`);
   }
-
-  done();
 });
 
-userQueue.process(async (job, done) => {
-  const { userId } = job.data;
-
-  if (!userId) {
-    done(new Error('Missing userId'));
-    return;
-  }
-
-  const db = dbClient.db();
-  const usersCollection = db.collection('users');
-  const user = await usersCollection.findOne({ _id: dbClient.getObjectId(userId) });
-
-  if (!user) {
-    done(new Error('User not found'));
-    return;
-  }
-
-  console.log(`Welcome ${user.email}!`);
-  
-  done();
-});
-
-export { fileQueue, userQueue };
+module.exports = fileQueue;
