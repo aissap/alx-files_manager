@@ -1,16 +1,33 @@
-import redisClient from '../utils/redis';
-import dbClient from '../utils/db';
+const { MongoClient } = require('mongodb');
 
-class AppController {
-  static getStatus(req, res) {
-    res.status(200).json({ redis: redisClient.isAlive(), db: dbClient.isAlive() });
-  }
+const AppController = {
+    async getStatus(req, res) {
+        let redisStatus = false;
+        let dbStatus = false;
 
-  static async getStats(req, res) {
-    const users = await dbClient.nbUsers();
-    const files = await dbClient.nbFiles();
-    res.status(200).json({ users, files });
-  }
-}
+        try {
+            redisStatus = redisClient.isAlive();
 
-export default AppController;
+            const client = new MongoClient(process.env.DB_HOST, {
+                useNewUrlParser: true,
+                useUnifiedTopology: true,
+            });
+            await client.connect();
+            const db = client.db(process.env.DB_DATABASE);
+            dbStatus = !!db;
+
+            client.close();
+        } catch (err) {
+            console.error('Error checking status:', err);
+        }
+
+        if (redisStatus && dbStatus) {
+            res.status(200).json({ redis: true, db: true });
+        } else {
+            res.status(500).json({ redis: false, db: false });
+        }
+    },
+
+};
+
+module.exports = AppController;
