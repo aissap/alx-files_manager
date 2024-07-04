@@ -1,6 +1,5 @@
-
-import dbClient from '../utils/db';
-import crypto from 'crypto';
+const crypto = require('crypto');
+const dbClient = require('../utils/db');
 
 class UsersController {
   static async postNew(req, res) {
@@ -14,7 +13,9 @@ class UsersController {
       return res.status(400).json({ error: 'Missing password' });
     }
 
-    const usersCollection = dbClient.db.collection('users');
+    const db = dbClient.client.db(dbClient.database);
+    const usersCollection = db.collection('users');
+
     const existingUser = await usersCollection.findOne({ email });
 
     if (existingUser) {
@@ -34,4 +35,4 @@ class UsersController {
   }
 }
 
-export default UsersController;
+module.exports = UsersController;
