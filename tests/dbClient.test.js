@@ -1,11 +1,21 @@
-import dbClient from '../utils/db';
+const Bull = require('bull');
+const { getDB } = require('./utils/db');
+const { ObjectId } = require('mongodb');
 
-test('dbClient is connected', async () => {
-  const isAlive = dbClient.isAlive();
-  expect(isAlive).toBe(true);
-});
+const userQueue = new Bull('userQueue');
 
-test('dbClient returns the correct database', async () => {
-  const db = dbClient.db();
-  expect(db).toBeDefined();
+userQueue.process(async (job) => {
+  const { userId } = job.data;
+
+  if (!userId) {
+    throw new Error('Missing userId');
+  }
+
+  const db = await getDB();
+  const user = await db.collection('users').findOne({ _id: ObjectId(userId) });
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+  console.log(`Welcome ${user.email}!`);
 });

@@ -1,6 +1,10 @@
+
 const dbClient = require('../utils/db');
 const redisClient = require('../utils/redis');
 const crypto = require('crypto');
+const Bull = require('bull');
+
+const userQueue = new Bull('userQueue');
 
 class UsersController {
   static async postNew(req, res) {
@@ -31,6 +35,8 @@ class UsersController {
 
     const result = await usersCollection.insertOne(newUser);
     const user = result.ops[0];
+
+    await userQueue.add({ userId: user._id });
 
     return res.status(201).json({ id: user._id, email: user.email });
   }

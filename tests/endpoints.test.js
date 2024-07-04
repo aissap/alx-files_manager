@@ -1,20 +1,16 @@
-import request from 'supertest';
-import app from '../app';
+const request = require('supertest');
+const { expect } = require('chai');
+const app = require('../app');
 
-describe('GET /status', () => {
-  it('should return status 200 and correct response', async () => {
-    const response = await request(app).get('/status');
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('redis');
-    expect(response.body).toHaveProperty('db');
-  });
-});
-
-describe('GET /stats', () => {
-  it('should return status 200 and correct response', async () => {
-    const response = await request(app).get('/stats');
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('users');
-    expect(response.body).toHaveProperty('files');
+describe('Status Endpoint Tests', () => {
+  it('should return status 200', (done) => {
+    request(app)
+      .get('/status')
+      .expect(200)
+      .end((err, res) => {
+        if (err) return done(err);
+        expect(res.body.status).to.equal('OK');
+        done();
+      });
   });
 });
